@@ -77,9 +77,9 @@ def test_nearest():
         if imf.test_files[test_f_id]["orient"] == imf.train_files[img_with_min_dist]["orient"]:
             result += 1
         confusion_matrix[imf.test_files[test_f_id]["orient"]/90, imf.train_files[img_with_min_dist]["orient"]/90] += 1
-    print "Accuracy:" + str(result*1.0/(i*1.0))
-    print "Confusion Matrix: " + str(confusion_matrix)
 
+    print "Confusion Matrix: \n" + str(confusion_matrix)
+    print "Accuracy:" + str(result*1.0/(i*1.0))
 
 start_time = time.time()
 train_file = argv[1]
