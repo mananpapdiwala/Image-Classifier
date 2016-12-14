@@ -219,8 +219,11 @@ if mode == "nearest":
 	#Uses the k nearest neighbor algortihm
     test_nearest()
 
-if mode == "adaboost":
-    stump_count = int(argv[4])
+# K- nearest code gives a slightly higher accuracy than Adaboost around 2-3% higher when decision stumps are 50
+# But k-nearest is too overfitting and hence we use Adaboost as best option
+if mode == "adaboost" or mode == "best":
+	# If mode is best we use Adaboost with 50 decision stumps
+    stump_count = 50 if mode == "best" else int(argv[4])
     count_Train = len(imf.train_files)
 
     # Creates the dictionary of pair of pixels

@@ -71,7 +71,7 @@ def test_nearest():
     with open('nearest_output.txt', 'w') as f:
         f.write(nearest_file_str.getvalue())
 
-#################Adaboost
+#################  Adaboost   ###############################
 # This method takes around 40 seconds for 10 stumps and provides accuracy around 52%
 # 9-10 minutes for 50 stumps and provides accuracy around 66%
 # 35-40 minutes for 100 stumps and provides accuracy around 69%
@@ -119,8 +119,13 @@ if mode == "nearest":
     #Uses the k nearest neighbor algortihm
     test_nearest()
 
-if mode == "adaboost":
-    stump_count = int(argv[4])
+# K- nearest code gives a slightly higher accuracy than Adaboost around 2-3% higher when decision stumps are 50
+# But k-nearest is too overfitting and hence we use Adaboost as best option
+# For best mode which is Adaboost of 50 stumps it takes 9-10 minutes to run the entire code
+# The train part won't take more than 7-8 minutes and hence we have not used model-file
+if mode == "adaboost" or mode == "best":
+    # If mode is best we use Adaboost with 50 decision stumps
+    stump_count = 50 if mode == "best" else int(argv[4])
     count_Train = len(imf.train_files)
 
     # Creates the dictionary of pair of pixels
