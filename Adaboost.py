@@ -3,9 +3,11 @@ from sys import argv, maxint
 import time
 import numpy as np
 import math
+import copy
+from cStringIO import StringIO
 # http://machinelearningmastery.com/implement-backpropagation-algorithm-scratch-python/
 
-
+# To maintain all the train and test data files
 class ImageFiles:
     def __init__(self):
         pass
@@ -15,31 +17,7 @@ class ImageFiles:
     adaboost = {}
     orientation = [0, 90, 180, 270]
 
-
-def read_files(file_name):
-    files = {}
-    input_file = open(file_name, 'r')
-    for line in input_file:
-        data = line.split()
-        img = np.empty((8, 8, 3), dtype=np.int)
-        index = 2
-        i = 0
-        while i < 8:
-            j = 0
-            while j < 8:
-                k = 0
-                while k < 3:
-                    img[i][j][k] = int(data[index])
-                    index += 1
-                    k += 1
-                j += 1
-            i += 1
-        files[data[0] + data[1]] = {"orient": int(data[1]), "img": img}
-
-    input_file.close()
-    return files
-
-
+# This function reads the data from the file given as parameter and returns a numpy array of that data
 def read_files2(file_name):
     files = {}
     input_file = open(file_name, 'r')
@@ -57,11 +35,15 @@ def read_files2(file_name):
     input_file.close()
     return files
 
-
+# The k nearest neighbors algorithm is used to estimate the orientation of the test file
+# For any one test data point euclidean distance is calculated with respect to every train example and the train example that gives min distance
+# The orientation of that train example is labelled to the test data point
+# This function prints accuracy, confusion matrix and writes the output in the file nearest_output.txt
 def test_nearest():
     confusion_matrix = np.zeros((4, 4), dtype=np.int)
     i = 0
     result = 0
+    nearest_file_str = StringIO()
     for test_f_id in imf.test_files:
         i += 1
         test_f_img = imf.test_files[test_f_id]["img"]
@@ -82,9 +64,12 @@ def test_nearest():
             result += 1
         confusion_matrix[
             imf.test_files[test_f_id]["orient"] / 90, imf.train_files[img_with_min_dist]["orient"] / 90] += 1
+        nearest_file_str.write(train_f_id.split('.jpg')[0] + " " + str(imf.train_files[img_with_min_dist]["orient"]) + '\n')
 
     print "Confusion Matrix: \n" + str(confusion_matrix)
     print "Accuracy:" + str(result * 1.0 / (i * 1.0))
+    with open('nearest_output.txt', 'w') as f:
+        f.write(nearest_file_str.getvalue())
 
 
 ########################
@@ -189,9 +174,37 @@ def predict(network, row):
     outputs = forward_propagate(network, row)
     return outputs.index(max(outputs))
 
+# This function initializes the weight of each train example to 1/N where N is the size of train data
+# This is the initialization used for Adaboost
 def initializeWeight(train, totalCount):
 	for example in train:
 		train[example]["weight"] = 1.0/totalCount
+
+# For any instance of the train table this function gives the best suited attribute or attribute with min error
+def getBestAttribute(boost, imageOrient):
+	for trainFileId in imf.train_files:
+		for pixels in boost:
+			p = [ int(pixel) for pixel in pixels.split()]
+			if (imf.train_files[trainFileId]["img"][p[0]] > imf.train_files[trainFileId]["img"][p[1]] and imf.train_files[trainFileId]["orient"] == imageOrient) or (imf.train_files[trainFileId]["img"][p[0]] < imf.train_files[trainFileId]["img"][p[1]] and imf.train_files[trainFileId]["orient"] != imageOrient):
+				boost[pixels]["value"] += imf.train_files[trainFileId]["weight"]
+
+	max_pixel = max([[pixel, boost[pixel]] for pixel in boost], key= lambda x: x[1]["value"])
+	return max_pixel
+
+# This function modifies the weights of the train examples that the selected attribute correctly identifies
+def modifyWeight(modifier, stump_pixel, imageOrient):
+	newSum = 0
+	p = [ int(pixel) for pixel in stump_pixel.split()]
+	for trainFileId in imf.train_files:
+		if (imf.train_files[trainFileId]["img"][p[0]] > imf.train_files[trainFileId]["img"][p[1]] and imf.train_files[trainFileId]["orient"] == imageOrient) or (imf.train_files[trainFileId]["img"][p[0]] < imf.train_files[trainFileId]["img"][p[1]] and imf.train_files[trainFileId]["orient"] != imageOrient):
+			imf.train_files[trainFileId]["weight"] *= modifier
+		newSum += imf.train_files[trainFileId]["weight"]
+	return newSum
+
+# This function normalizes the weights in the train table
+def normalize(normalizeValue):
+	for trainFileId in imf.train_files:
+		imf.train_files[trainFileId]["weight"] = imf.train_files[trainFileId]["weight"]/normalizeValue
 
 start_time = time.time()
 train_file = argv[1]
@@ -203,62 +216,84 @@ imf.train_files = read_files2(train_file)
 imf.test_files = read_files2(test_file)
 
 if mode == "nearest":
+	#Uses the k nearest neighbor algortihm
     test_nearest()
 
 if mode == "adaboost":
     stump_count = int(argv[4])
-    # count_Train = {0: 0, 90: 0, 180: 0, 270: 0}
-    # for orientation in count_Train:
-    # 	count_Train[orientation] = len([x for x in imf.train_files if imf.train_files[x]["orient"] == orientation])
     count_Train = len(imf.train_files)
-    print count_Train
+
+    # Creates the dictionary of pair of pixels
+    # Length of dictionary is equal to stump size
+    # The pair of pixels are selected randomly 
     for i in range(0, stump_count):
         pixel1 = -1
         pixel2 = -1
         while pixel1 == -1 or pixel2 == -1 or (str(pixel1) + " " + str(pixel2)) in imf.adaboost:
             pixel1 = randint(0,191)
             pixel2 = randint(0,191)
-        imf.adaboost[str(pixel1) + " " + str(pixel2)] = {0: 0, 90: 0, 180: 0, 270: 0};
-    initializeWeight(imf.train_files, count_Train)
+        imf.adaboost[str(pixel1) + " " + str(pixel2)] = {"value": 0};
 
-    for trainFileId in imf.train_files:
-    	for pixels in imf.adaboost:
-    		p = [ int(pixel) for pixel in pixels.split()]
-    		if (imf.train_files[trainFileId]["img"][p[0]] > imf.train_files[trainFileId]["img"][p[1]] and imf.train_files[trainFileId]["orient"] == 0) or (imf.train_files[trainFileId]["img"][p[0]] < imf.train_files[trainFileId]["img"][p[1]] and imf.train_files[trainFileId]["orient"] != 0):
-    			imf.adaboost[pixels][0] += 1
+    # Adaboost method is used to create an ensembler for each orientation individually
+    all_orientation_stump = {}
+    for orient in imf.orientation:
+    	bestAttribute = []
+    	initializeWeight(imf.train_files, count_Train)
 
-    print imf.adaboost
-    max_pixel = max([imf.adaboost[pixel] for pixel in imf.adaboost], key= lambda x: x[0])
-    print max_pixel
-    # for trainFileId in imf.train_files:
-    #     for pixels in imf.adaboost:
-    #         p = [ int(pixel) for pixel in pixels.split()]
-    #         if imf.train_files[trainFileId]["img"][p[0]] > imf.train_files[trainFileId]["img"][p[1]]:
-    #             imf.adaboost[pixels][imf.train_files[trainFileId]["orient"]] += 1
+    	newBoost = copy.deepcopy(imf.adaboost)
+    	for stump in range(0, stump_count):
+    		bestAttribute.append(getBestAttribute(newBoost, orient))
+    		totalWeight = sum([imf.train_files[train]["weight"] for train in imf.train_files])
+    		error = (totalWeight - bestAttribute[stump][1]["value"]) / totalWeight
+    		# Sometimes the pair of pixel selected randomly are so poor that the error rate is 100% so we give error rate 99% to avoid divide by zero error
+    		error = 0.99 if error == 1 else error
 
-    # zeroOrder = sorted(imf.adaboost, key=lambda x: imf.adaboost[x][0], reverse = True)
-    # zeroList = []
-    # for i in zeroOrder:
-    #     zeroList.append([i,imf.adaboost[i][0]])
-    # secondOrder = sorted(imf.adaboost, key=lambda x: imf.adaboost[x][90], reverse = True)
-    # secondList = []
-    # for i in secondOrder:
-    #     secondList.append([i,imf.adaboost[i][90]])
+    		# Calculates the modified weights to be assigned
+    		beta = (error)/(1-error)
 
-    # thirdOrder = sorted(imf.adaboost, key=lambda x: imf.adaboost[x][180], reverse = True)
-    # thirdList = []
-    # for i in thirdOrder:
-    #     thirdList.append([i,imf.adaboost[i][180]])
+    		# Stores the weights of the decision stump based on error
+    		bestAttribute[stump].append(1 + math.log(1/beta))
+    		normalizeSum = modifyWeight(beta, bestAttribute[stump][0], orient)
+    		normalize(normalizeSum)
+    		del newBoost[bestAttribute[stump][0]]
 
-    # fourthOrder = sorted(imf.adaboost, key=lambda x: imf.adaboost[x][270], reverse = True)
-    # fourthList = []
-    # for i in fourthOrder:
-    #     fourthList.append([i,imf.adaboost[i][270]])
+    		for key in newBoost:
+    			newBoost[key]["value"] = 0
 
-    # print zeroList
-    # print secondList
-    # print thirdList
-    # print fourthList    
+    	all_orientation_stump[orient] = bestAttribute
+
+    # Essembler for each orientation is executed on any test data point
+    # The one that gives best value is used to label the test point 
+    count_correct = 0
+    confusion_matrix = np.zeros((4, 4), dtype=np.int)
+    file_str = StringIO()
+    for testFileId in imf.test_files:
+    	finalDecision = {}
+    	for orient in all_orientation_stump:
+    		decisionValue = 0
+    		for decision_stump in all_orientation_stump[orient]:
+    			p = [ int(pixel) for pixel in decision_stump[0].split()]
+    			if (imf.test_files[testFileId]["img"][p[0]] > imf.test_files[testFileId]["img"][p[1]]):
+    				decisionValue += decision_stump[2] * 1
+    			else:
+    				decisionValue += decision_stump[2] * -1
+    		finalDecision[orient] = decisionValue
+    	decisionOrient = max([ [key, finalDecision[key]] for key in finalDecision], key = lambda x: x[1])
+    	if imf.test_files[testFileId]["orient"] == decisionOrient[0]:
+    		count_correct += 1
+    	confusion_matrix[imf.test_files[testFileId]["orient"] / 90, decisionOrient[0] / 90] += 1
+    	file_str.write(testFileId.split('.jpg')[0] + ".jpg" + " " + str(decisionOrient[0]) + '\n')
+
+    # Prints the confusion matrix, accuracy and writes the output in file in adaboost_output.txt
+    print "Confusion Matrix: \n" + str(confusion_matrix)
+    print "Accuracy:" + str( (count_correct * 100.0) / len(imf.test_files) )
+    with open('adaboost_output.txt', 'w') as f:
+        f.write(file_str.getvalue())
+
+
+
+    
+        
 
 if mode == "nnet":
     g_dataset = create_dataset()
