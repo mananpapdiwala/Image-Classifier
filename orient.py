@@ -152,6 +152,12 @@ if mode == "adaboost":
             beta = (error)/(1-error)
 
             # Stores the weights of the decision stump based on error
+            # Some explanation for the formula used for weighting the decision stump
+            # The formula is 1 + log(1-error/error)
+            # The decision stump with least error rate or highest accuracy the one we select in the intial stages will have low denominator
+            # This will lead to weight value above 1
+            # The one with poor performance or most error will have negative values after taking log and thus such stumps will get weights between 0 and 1
+            # The important thing is it will get below 1
             bestAttribute[stump].append(1 + math.log(1/beta))
             normalizeSum = modifyWeight(beta, bestAttribute[stump][0], orient)
             normalize(normalizeSum)
